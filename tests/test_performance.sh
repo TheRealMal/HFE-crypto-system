@@ -27,7 +27,7 @@ echo ""
 
 # Создание директории для результатов
 mkdir -p logs
-RESULTS_FILE="logs/performance_results.txt"
+RESULTS_FILE="logs/performance_results.log"
 
 # Очистка файла результатов
 echo "Результаты тестирования производительности" > "$RESULTS_FILE"
