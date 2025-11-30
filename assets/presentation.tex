@@ -1,0 +1,647 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+% Настройка темы
+\usetheme{Madrid}
+\usecolortheme{default}
+
+% Настройка подсветки кода
+\lstset{
+    language=Python,
+    basicstyle=\tiny\ttfamily,
+    keywordstyle=\color{blue},
+    stringstyle=\color{red},
+    commentstyle=\color{green!60!black},
+    numbers=left,
+    numberstyle=\tiny,
+    breaklines=true,
+    frame=single,
+    showstringspaces=false,
+    extendedchars=true,
+    inputencoding=utf8,
+    keepspaces=true
+}
+
+% Информация о презентации
+\title[HFE Криптосистема]{Реализация алгоритмов шифрования и расшифрования\\для криптосистемы HFE}
+\subtitle{Параллельные вычисления}
+\author{ИУ8-112}
+\institute{МГТУ им. Н.Э. Баумана}
+\date{\today}
+
+\begin{document}
+
+% Титульный слайд
+\begin{frame}
+\titlepage
+\end{frame}
+
+% ============================================
+% РАЗДЕЛ 1: ВВЕДЕНИЕ В HFE
+% ============================================
+
+\section{Введение в HFE}
+
+\begin{frame}{Что такое HFE?}
+\begin{itemize}
+    \item \textbf{HFE (Hidden Field Equations)} — криптографическая система с открытым ключом
+    \item Предложена Жаком Патарином в 1996 году
+    \item Основана на многочленных уравнениях над конечными полями
+    \item Использует скрытую структуру конечного поля для обеспечения безопасности
+\end{itemize}
+
+\vspace{0.5cm}
+\begin{block}{Основная идея}
+Преобразование сложных уравнений над конечным полем в систему квадратичных уравнений над GF(2)
+\end{block}
+\end{frame}
+
+\begin{frame}{Математические основы}
+\begin{columns}
+\column{0.5\textwidth}
+\textbf{Конечное поле GF(2$^n$)}
+\begin{itemize}
+    \item Поле размерности $n$
+    \item $2^n$ элементов
+    \item Операции: сложение (XOR), умножение по модулю неприводимого многочлена
+    \item Неприводимый многочлен: $x^n + \ldots + 1$
+\end{itemize}
+
+\column{0.5\textwidth}
+\textbf{HFE многочлен}
+\begin{itemize}
+    \item $P(x) = \sum_{i \leq j \leq d} a_{ij} \cdot x^{2^i + 2^j}$
+    \item Степень $d$ ограничена
+    \item Коэффициенты $a_{ij} \in$ GF(2$^n$)
+\end{itemize}
+\end{columns}
+
+\vspace{0.5cm}
+\begin{alertblock}{Важно}
+Для расшифрования необходимо решить уравнение $P(x) = y$, что требует знания секретной структуры
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Структура HFE криптосистемы}
+\begin{center}
+\Large
+Открытый текст $\rightarrow$ $S$ $\rightarrow$ $P(x)$ $\rightarrow$ $T$ $\rightarrow$ Шифротекст
+\end{center}
+
+\vspace{0.5cm}
+\begin{center}
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+Открытый текст & $S$ & HFE многочлен & $T$ & Шифротекст \\
+\hline
+\end{tabular}
+\end{center}
+
+\vspace{0.5cm}
+\textbf{Алгоритм шифрования:}
+\begin{enumerate}
+    \item Применение секретного аффинного преобразования $S$: $x' = S_1 \cdot x + S_0$
+    \item Вычисление HFE многочлена: $y' = P(x')$
+    \item Применение секретного аффинного преобразования $T$: $y = T_1 \cdot y' + T_0$
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Алгоритм расшифрования}
+\begin{enumerate}
+    \item \textbf{Обратное преобразование $T$}: $y' = T_1^{-1} \cdot (y - T_0)$
+    \item \textbf{Решение HFE уравнения}: найти $x'$ такой, что $P(x') = y'$
+    \begin{itemize}
+        \item Требует перебора или знания структуры многочлена
+        \item В нашей реализации используется перебор всех возможных значений
+    \end{itemize}
+    \item \textbf{Обратное преобразование $S$}: $x = S_1^{-1} \cdot (x' - S_0)$
+\end{enumerate}
+
+\vspace{0.5cm}
+\begin{alertblock}{Вычислительная сложность}
+Решение HFE уравнения — самая затратная операция, требует $O(2^n)$ операций в худшем случае
+\end{alertblock}
+\end{frame}
+
+% ============================================
+% РАЗДЕЛ 2: ОБЫЧНАЯ РЕАЛИЗАЦИЯ
+% ============================================
+
+\section{Обычная реализация}
+
+\begin{frame}{Архитектура обычной реализации}
+\begin{block}{Основные компоненты}
+\begin{itemize}
+    \item \texttt{GF2n} — класс для работы с конечным полем GF(2$^n$)
+    \item \texttt{HFEBase} — базовая реализация HFE
+    \item Последовательная обработка данных
+\end{itemize}
+\end{block}
+
+\vspace{0.3cm}
+\textbf{Последовательность операций:}
+\begin{enumerate}
+    \item Инициализация: генерация ключей (матрицы $S_1, S_0, T_1, T_0$)
+    \item Для каждого байта данных:
+    \begin{itemize}
+        \item Преобразование байта в вектор бит
+        \item Применение $S$, вычисление $P(x)$, применение $T$
+        \item Преобразование результата обратно в байт
+    \end{itemize}
+\end{enumerate}
+\end{frame}
+
+\begin{frame}[fragile]{Что выполняется последовательно?}
+\begin{lstlisting}
+def encrypt_block(self, data: bytes) -> bytes:
+    result = []
+    for byte_val in data:  # Sequential processing
+        # Convert byte to bit vector
+        plaintext = [(byte_val >> i) & 1 
+                     for i in range(self.n)]
+        
+        # Encrypt single byte
+        ciphertext = self.encrypt(plaintext)
+        
+        # Convert back to byte
+        cipher_byte = sum(bit << i 
+                         for i, bit in enumerate(ciphertext))
+        result.append(cipher_byte)
+    
+    return bytes(result)
+\end{lstlisting}
+
+\vspace{0.3cm}
+\begin{alertblock}{Узкое место}
+Каждый байт обрабатывается независимо, но выполнение происходит последовательно на одном ядре CPU
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Вычислительная сложность}
+\begin{columns}
+\column{0.5\textwidth}
+\textbf{Шифрование одного байта:}
+\begin{itemize}
+    \item Аффинное преобразование $S$: $O(n^2)$
+    \item HFE многочлен: $O(d)$
+    \item Аффинное преобразование $T$: $O(n^2)$
+    \item \textbf{Итого:} $O(n^2 + d)$
+\end{itemize}
+
+\column{0.5\textwidth}
+\textbf{Расшифрование одного байта:}
+\begin{itemize}
+    \item Обратное $T$: $O(n^2)$
+    \item Решение HFE: $O(2^n)$ — перебор!
+    \item Обратное $S$: $O(n^2)$
+    \item \textbf{Итого:} $O(2^n)$
+\end{itemize}
+\end{columns}
+
+\vspace{0.5cm}
+\textbf{Для $N$ байт:} $O(N \cdot (n^2 + d))$ для шифрования, $O(N \cdot 2^n)$ для расшифрования
+\end{frame}
+
+% ============================================
+% РАЗДЕЛ 3: CPU-ПАРАЛЛЕЛИЗАЦИЯ
+% ============================================
+
+\section{CPU-параллелизация}
+
+\begin{frame}{Подход к CPU-параллелизации}
+\begin{block}{Используемая технология}
+\texttt{multiprocessing} — создание нескольких процессов Python для параллельной обработки
+\end{block}
+
+\vspace{0.3cm}
+\textbf{Стратегия распараллеливания:}
+\begin{enumerate}
+    \item Разделение данных на \textbf{chunks} (части)
+    \item Каждый процесс обрабатывает свой chunk независимо
+    \item Объединение результатов
+\end{enumerate}
+
+\vspace{0.3cm}
+\begin{center}
+\begin{tabular}{|c|c|c|c|}
+\hline
+Процесс 1 & Процесс 2 & Процесс 3 & Процесс 4 \\
+\hline
+Байты 0-255 & Байты 256-511 & Байты 512-767 & Байты 768-1023 \\
+\hline
+\end{tabular}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]{Что конкретно распараллелено?}
+\begin{lstlisting}
+def encrypt_block(self, data: bytes) -> bytes:
+    # Convert all bytes to vectors
+    plaintexts = [[(byte_val >> i) & 1 
+                   for i in range(self.n)] 
+                  for byte_val in data]
+    
+    # Split into chunks
+    chunk_size = len(plaintexts) // num_processes
+    chunks = [plaintexts[i:i + chunk_size] 
+              for i in range(0, len(plaintexts), chunk_size)]
+    
+    # PARALLEL PROCESSING
+    with Pool(processes=num_processes) as pool:
+        results = pool.map(_encrypt_chunk_worker, chunks)
+    
+    # Merge results
+    ciphertexts = []
+    for chunk_result in results:
+        ciphertexts.extend(chunk_result)
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Детали распараллеливания}
+\begin{block}{Распараллеленные операции}
+\begin{itemize}
+    \item \textbf{Обработка независимых байтов} — каждый процесс шифрует свой набор байтов
+    \item \textbf{Аффинные преобразования} — выполняются параллельно для разных данных
+    \item \textbf{Вычисление HFE многочлена} — параллельно для разных входных значений
+    \item \textbf{Решение HFE уравнений} — параллельно при расшифровании
+\end{itemize}
+\end{block}
+
+\vspace{0.3cm}
+\begin{alertblock}{Что НЕ распараллелено}
+\begin{itemize}
+    \item Генерация ключей (выполняется один раз)
+    \item Преобразование данных между форматами (вектор $\leftrightarrow$ байт)
+    \item Объединение результатов (последовательное)
+\end{itemize}
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Архитектура CPU-параллельной версии}
+\begin{center}
+\begin{tabular}{c}
+Входные данные \\
+$\downarrow$ \\
+Разделение на chunks \\
+$\downarrow$ \\
+\begin{tabular}{ccc}
+Процесс 1 & Процесс 2 & Процесс 3 \\
+Chunk 1 & Chunk 2 & Chunk 3 \\
+\end{tabular} \\
+$\downarrow$ \\
+Объединение результатов \\
+$\downarrow$ \\
+Выходные данные \\
+\end{tabular}
+\end{center}
+
+\vspace{0.3cm}
+\textbf{Преимущества:}
+\begin{itemize}
+    \item Использование всех ядер CPU
+    \item Линейное ускорение (до количества ядер)
+    \item Независимость процессов (изоляция ошибок)
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Оценка производительности CPU-версии}
+\begin{block}{Теоретическое ускорение}
+Для $P$ процессов: ускорение $\approx P \times$ (с учетом накладных расходов)
+\end{block}
+
+\vspace{0.3cm}
+\textbf{Накладные расходы:}
+\begin{itemize}
+    \item Создание процессов: $\sim 10-50$ мс
+    \item Передача данных между процессами
+    \item Синхронизация и объединение результатов
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Эффективность:}
+\begin{itemize}
+    \item Для больших данных ($> 1$ KB): эффективность $\approx 80-95\%$
+    \item Для малых данных ($< 100$ байт): накладные расходы могут превысить выгоду
+\end{itemize}
+\end{frame}
+
+% ============================================
+% РАЗДЕЛ 4: GPU-ПАРАЛЛЕЛИЗАЦИЯ
+% ============================================
+
+\section{GPU-параллелизация}
+
+\begin{frame}{Подход к GPU-параллелизации}
+\begin{block}{Используемая технология}
+\texttt{Numba CUDA} — компиляция Python кода в CUDA kernels для выполнения на GPU
+\end{block}
+
+\vspace{0.3cm}
+\textbf{Архитектура GPU:}
+\begin{itemize}
+    \item Тысячи потоков (2048-8192+)
+    \item SIMD (Single Instruction Multiple Data)
+    \item Высокая пропускная способность для параллельных операций
+    \item Медленная передача данных CPU $\leftrightarrow$ GPU
+\end{itemize}
+
+\vspace{0.3cm}
+\begin{alertblock}{Особенность}
+GPU оптимален для больших объемов данных и однотипных операций
+\end{alertblock}
+\end{frame}
+
+\begin{frame}[fragile]{Что конкретно распараллелено на GPU?}
+\begin{lstlisting}
+# CUDA kernel for affine transformation
+@cuda_jit
+def _gpu_affine_transform(input_data, A, b, n, output):
+    idx = cuda.grid(1)  # Thread index
+    if idx < len(input_data):
+        for i in range(n):
+            sum_val = 0
+            for j in range(n):
+                sum_val ^= (A[i, j] * input_data[idx * n + j]) % 2
+            output[idx * n + i] = (sum_val + b[i]) % 2
+
+# CUDA kernel for HFE polynomial
+@cuda_jit
+def _gpu_hfe_polynomial(x, n, d, result):
+    idx = cuda.grid(1)
+    if idx < len(x):
+        res = 0
+        for i in range(1, d + 1):
+            power = 1 << i
+            if power < (1 << n):
+                # Compute x^power
+                res ^= compute_power(x[idx], power, n)
+        result[idx] = res
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Распараллеленные операции на GPU}
+\begin{block}{Полностью распараллелено:}
+\begin{itemize}
+    \item \textbf{Аффинные преобразования} — каждый поток обрабатывает один элемент данных
+    \item \textbf{Вычисление HFE многочлена} — параллельно для всех входных значений
+    \item \textbf{Операции над полями GF(2$^n$)} — умножение, сложение
+\end{itemize}
+\end{block}
+
+\vspace{0.3cm}
+\begin{alertblock}{Частично распараллелено:}
+\begin{itemize}
+    \item \textbf{Решение HFE уравнений} — использует гибридный подход (GPU + CPU)
+    \begin{itemize}
+        \item Перебор выполняется на CPU из-за сложности ветвления
+        \item Аффинные преобразования — на GPU
+    \end{itemize}
+\end{itemize}
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Архитектура GPU-параллельной версии}
+\begin{center}
+\begin{tabular}{c}
+CPU: Подготовка данных \\
+$\downarrow$ \\
+Передача CPU $\rightarrow$ GPU \\
+$\downarrow$ \\
+GPU: Параллельная обработка \\
+(Тысячи потоков) \\
+$\downarrow$ \\
+Передача GPU $\rightarrow$ CPU \\
+$\downarrow$ \\
+CPU: Объединение результатов \\
+\end{tabular}
+\end{center}
+\end{frame}
+
+\begin{frame}{Архитектура GPU-параллельной версии}
+\textbf{Этапы обработки:}
+\begin{enumerate}
+    \item Преобразование данных на CPU
+    \item Копирование на GPU (\texttt{cuda.to\_device})
+    \item Параллельное выполнение CUDA kernels
+    \item Копирование результатов обратно на CPU
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{CUDA Kernel функции}
+\begin{block}{Реализованные kernels:}
+\begin{itemize}
+    \item \texttt{\_gpu\_affine\_transform} — аффинное преобразование
+    \item \texttt{\_gpu\_hfe\_polynomial} — вычисление HFE многочлена
+    \item \texttt{\_gpu\_multiply\_gf2n} — умножение в GF(2$^n$)
+    \item \texttt{\_gpu\_power\_gf2n} — возведение в степень
+\end{itemize}
+\end{block}
+
+\vspace{0.3cm}
+\textbf{Конфигурация выполнения:}
+\begin{itemize}
+    \item \texttt{threads\_per\_block = 256} (настраивается)
+    \item \texttt{blocks\_per\_grid = (n\_bytes + 255) / 256}
+    \item Каждый поток обрабатывает один байт данных
+\end{itemize}
+\end{frame}
+
+\begin{frame}{CUDA Kernel функции}
+\begin{alertblock}{Ограничения}
+\begin{itemize}
+    \item Требуется NVIDIA GPU с CUDA
+    \item Накладные расходы на передачу данных
+    \item Неэффективно для малых объемов данных
+\end{itemize}
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Оценка производительности GPU-версии}
+\begin{block}{Теоретическое ускорение}
+Для больших данных ($> 10$ MB): ускорение $\approx 10-100 \times$ по сравнению с CPU
+\end{block}
+
+\vspace{0.3cm}
+\textbf{Факторы производительности:}
+\begin{itemize}
+    \item \textbf{Размер данных:} чем больше, тем эффективнее
+    \item \textbf{Пропускная способность памяти:} ограничивающий фактор
+    \item \textbf{Вычислительная мощность:} тысячи потоков работают параллельно
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Накладные расходы:}
+\begin{itemize}
+    \item Передача данных CPU $\leftrightarrow$ GPU: $\sim 1-10$ мс
+    \item Запуск kernel: $\sim 0.1-1$ мс
+    \item Для данных $< 100$ KB накладные расходы могут превысить выгоду
+\end{itemize}
+\end{frame}
+
+% ============================================
+% РАЗДЕЛ 5: СРАВНЕНИЕ
+% ============================================
+
+\section{Сравнение реализаций}
+
+\begin{frame}{Сравнение подходов}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Характеристика} & \textbf{Обычная} & \textbf{CPU} & \textbf{GPU} \\
+\hline
+Ядра/Потоки & 1 & 4-16 & 2048-8192+ \\
+\hline
+Накладные расходы & Минимальные & Средние & Высокие \\
+\hline
+Оптимальный размер данных & Любой & $> 1$ KB & $> 10$ MB \\
+\hline
+Ускорение (теоретическое) & 1$\times$ & 4-16$\times$ & 10-100$\times$ \\
+\hline
+Сложность реализации & Низкая & Средняя & Высокая \\
+\hline
+Требования & - & Многоядерный CPU & NVIDIA GPU + CUDA \\
+\hline
+\end{tabular}
+\end{table}
+
+\vspace{0.3cm}
+\begin{alertblock}{Вывод}
+Выбор реализации зависит от размера данных и доступного оборудования
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Что распараллелено в каждой версии?}
+\begin{columns}
+\column{0.33\textwidth}
+\textbf{Обычная}
+\begin{itemize}
+    \item Ничего
+    \item Последовательная обработка байтов
+    \item Одно ядро CPU
+\end{itemize}
+
+\column{0.33\textwidth}
+\textbf{CPU}
+\begin{itemize}
+    \item Обработка независимых байтов
+    \item Аффинные преобразования
+    \item HFE многочлен
+    \item Решение HFE уравнений
+\end{itemize}
+
+\column{0.33\textwidth}
+\textbf{GPU}
+\begin{itemize}
+    \item Аффинные преобразования (kernel)
+    \item HFE многочлен (kernel)
+    \item Операции над полями (kernel)
+    \item Решение HFE (гибрид)
+\end{itemize}
+\end{columns}
+
+\vspace{0.5cm}
+\begin{center}
+\textbf{Все версии распараллеливают обработку независимых блоков данных}
+\end{center}
+\end{frame}
+
+\begin{frame}{График производительности (теоретический)}
+\begin{center}
+\textbf{Зависимость времени выполнения от размера данных}
+\end{center}
+
+\begin{center}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Размер данных} & \textbf{Обычная} & \textbf{CPU} & \textbf{GPU} \\
+\hline
+$< 1$ KB & \textcolor{blue}{Быстро} & Средне & Медленно \\
+\hline
+1 KB - 10 MB & Медленно & \textcolor{red}{Быстро} & Средне \\
+\hline
+$> 10$ MB & Очень медленно & Медленно & \textcolor{green!60!black}{Очень быстро} \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{alertblock}{Оптимальная точка перехода}
+Для данных $> 1$ KB CPU-версия начинает превосходить обычную\\
+Для данных $> 10$ MB GPU-версия становится оптимальной
+\end{alertblock}
+
+\textbf{Наблюдения:}
+\begin{itemize}
+    \item Для малых данных: обычная версия быстрее (нет накладных расходов)
+    \item Для средних данных: CPU-версия оптимальна
+    \item Для больших данных: GPU-версия значительно быстрее
+\end{itemize}
+\end{frame}
+
+% ============================================
+% РАЗДЕЛ 6: ЗАКЛЮЧЕНИЕ
+% ============================================
+
+\section{Заключение}
+
+\begin{frame}{Ключевые моменты}
+\begin{block}{HFE криптосистема}
+\begin{itemize}
+    \item Основана на многочленных уравнениях над GF(2$^n$)
+    \item Использует аффинные преобразования для скрытия структуры
+    \item Расшифрование требует решения HFE уравнений
+\end{itemize}
+\end{block}
+
+\vspace{0.3cm}
+\begin{block}{Распараллеливание}
+\begin{itemize}
+    \item \textbf{CPU:} Распараллелена обработка независимых байтов через multiprocessing
+    \item \textbf{GPU:} Распараллелены аффинные преобразования и вычисление HFE многочлена через CUDA kernels
+    \item Обе версии эффективны для больших объемов данных
+\end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}{Рекомендации по использованию}
+\begin{columns}
+\column{0.5\textwidth}
+\textbf{Используйте обычную версию:}
+\begin{itemize}
+    \item Малые данные ($< 1$ KB)
+    \item Отладка
+    \item Простые задачи
+\end{itemize}
+
+\column{0.5\textwidth}
+\textbf{Используйте CPU-версию:}
+\begin{itemize}
+    \item Средние данные (1 KB - 100 MB)
+    \item Многоядерный CPU
+    \item Баланс производительности
+\end{itemize}
+\end{columns}
+
+\vspace{0.5cm}
+\begin{center}
+\textbf{Используйте GPU-версию:}
+\begin{itemize}
+    \item Большие данные ($> 10$ MB)
+    \item NVIDIA GPU с CUDA
+    \item Максимальная производительность
+\end{itemize}
+\end{center}
+\end{frame}
+
+\end{document}
+
