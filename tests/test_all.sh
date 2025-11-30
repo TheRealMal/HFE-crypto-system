@@ -19,14 +19,14 @@ if [ ! -f "main.py" ]; then
     exit 1
 fi
 
-echo "Запуск всех версий с размером данных 8192 байт..."
+echo "Запуск всех версий с размером данных 16000 байт..."
 echo ""
 
 # Создание директории для логов, если её нет
 mkdir -p logs
 
 # Запуск всех режимов
-python3 main.py --mode all --data-size 8192 --log-level INFO --log-file logs/test_all.log
+python3 main.py --mode all --data-size 16000 --log-level INFO --log-file logs/test_all.log
 
 if [ $? -eq 0 ]; then
     echo ""
