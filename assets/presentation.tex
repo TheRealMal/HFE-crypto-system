@@ -27,7 +27,11 @@
     showstringspaces=false,
     extendedchars=true,
     inputencoding=utf8,
-    keepspaces=true
+    keepspaces=true,
+    linewidth=\textwidth,
+    numbersep=5pt, % Distance between numbers and code
+    xleftmargin=1.5em, % Indent the code from the left edge of the frame
+    framexleftmargin=0pt, % Align the frame with the text margin
 }
 
 % Информация о презентации
@@ -341,75 +345,65 @@ $\downarrow$ \\
 
 \begin{frame}{Подход к GPU-параллелизации}
 \begin{block}{Используемая технология}
-\texttt{Numba CUDA} — компиляция Python кода в CUDA kernels для выполнения на GPU
+\texttt{PyTorch} — высокоуровневая библиотека для тензорных вычислений на GPU с автоматической оптимизацией
 \end{block}
 
 \vspace{0.3cm}
 \textbf{Архитектура GPU:}
 \begin{itemize}
     \item Тысячи потоков (2048-8192+)
-    \item SIMD (Single Instruction Multiple Data)
+    \item SIMT (Single Instruction Multiple Threads)
     \item Высокая пропускная способность для параллельных операций
-    \item Медленная передача данных CPU $\leftrightarrow$ GPU
+    \item Пакетная обработка (batch processing) для минимизации накладных расходов
 \end{itemize}
 
 \vspace{0.3cm}
 \begin{alertblock}{Особенность}
-GPU оптимален для больших объемов данных и однотипных операций
+GPU оптимален для больших объемов данных и однотипных операций. PyTorch обеспечивает автоматическую оптимизацию доступа к памяти
 \end{alertblock}
 \end{frame}
 
 \begin{frame}[fragile]{Что конкретно распараллелено на GPU?}
 \begin{lstlisting}
-# Optimized CUDA kernel for affine transformation
-@cuda_jit
-def _gpu_affine_transform(input_data, A, b, n, output, n_bytes, total_threads):
-    idx = cuda.grid(1)  # Thread index
-    # Grid-stride loop: process multiple elements
-    byte_idx = idx
-    while byte_idx < n_bytes:
-        for i in range(n): # Memory coalescing
-            sum_val = 0
-            for j in range(n):
-                if A[i, j] == 1:
-                    sum_val ^= input_data[byte_idx * n + j]
-            output[byte_idx * n + i] = (sum_val ^ b[i]) % 2
-        byte_idx += total_threads
-# Optimized CUDA kernel for HFE polynomial
-@cuda_jit
-def _gpu_hfe_polynomial(x, n, d, result, total_threads):
-    idx = cuda.grid(1)
-    elem_idx = idx
-    while elem_idx < len(x):
-        res = 0
-        for i in range(1, d + 1):
-            power = 1 << i
-            if power < (1 << n):
-                # Uses optimized power function
-                res ^= _gpu_power_gf2n_device(x[elem_idx], power, n, irreducible)
-        result[elem_idx] = res
-        elem_idx += total_threads
+# Batch encryption using PyTorch tensors
+def encrypt_batch(self, plaintexts: torch.Tensor) -> torch.Tensor:
+    # Step 1: Apply S (matrix multiplication on GPU)
+    x = self._affine_transform_gpu(plaintexts, self.S1_gpu, self.S0_gpu)
+    x_field = self.gpu_field.vector_to_field(x)
+    
+    # Step 2: Apply HFE polynomial (parallel for the whole batch)
+    y_field = self._hfe_polynomial_gpu(x_field)
+    y = self.gpu_field.field_to_vector(y_field)
+    
+    # Step 3: Apply T (matrix multiplication on GPU)
+    ciphertexts = self._affine_transform_gpu(y, self.T1_gpu, self.T0_gpu)
+    return ciphertexts
+
+# Affine transformation with type optimization
+def _affine_transform_gpu(self, x, A, b):
+    x_float = x.float()  # Convert for matmul
+    y = (x_float @ A.T + b.unsqueeze(0)) % 2
+    return (y.long() % 2).long()  # Back to int64
 \end{lstlisting}
 \end{frame}
 
 \begin{frame}{Распараллеленные операции на GPU}
 \begin{block}{Полностью распараллелено (оптимизировано):}
 \begin{itemize}
-    \item \textbf{Аффинные преобразования} — grid-stride loop, каждый поток обрабатывает несколько элементов
-    \item \textbf{Вычисление HFE многочлена} — параллельно для всех входных значений с оптимизированным умножением
-    \item \textbf{Операции над полями GF(2$^n$)} — умножение со специализацией для n=8, возведение в степень
-    \item \textbf{Преобразования бит<->поле} — коалесцированный доступ к памяти
+    \item \textbf{Аффинные преобразования} — матричное умножение через PyTorch (автоматическая оптимизация)
+    \item \textbf{Вычисление HFE многочлена} — параллельно для всего батча через тензорные операции
+    \item \textbf{Операции над полями GF(2$^n$)} — битовые операции (XOR, AND, сдвиги) на GPU
+    \item \textbf{Преобразования бит<->поле} — векторные операции PyTorch
+    \item \textbf{Пакетная обработка} — обработка батчей размером 1024+ элементов одновременно
 \end{itemize}
 \end{block}
 
-\vspace{0.3cm}
-\begin{alertblock}{Частично распараллелено:}
+\begin{alertblock}{Параллельное решение HFE уравнений:}
 \begin{itemize}
-    \item \textbf{Решение HFE уравнений} — использует гибридный подход (GPU + CPU)
-    \begin{itemize}
-        \item Перебор выполняется на CPU из-за сложности ветвления
-        \item Аффинные преобразования — на GPU (оптимизированы)
-    \end{itemize}
+    \item \textbf{Параллельный перебор} — для малых полей (n $\leq$ 8) создается сетка всех возможных значений
+    \item \textbf{Векторизованное вычисление} — P(x) вычисляется для всех x одновременно
+    \item \textbf{Поиск совпадений} — через тензорные операции сравнения
+    \item Для больших полей используется fallback на CPU
 \end{itemize}
 \end{alertblock}
 \end{frame}
@@ -418,15 +412,19 @@ def _gpu_hfe_polynomial(x, n, d, result, total_threads):
 \begin{center}
 \begin{tabular}{c}
 CPU: Подготовка данных \\
+(байты $\rightarrow$ векторы бит) \\
 $\downarrow$ \\
-Передача CPU $\rightarrow$ GPU \\
+Создание PyTorch тензоров \\
 $\downarrow$ \\
-GPU: Параллельная обработка \\
-(Тысячи потоков) \\
+Передача CPU $\rightarrow$ GPU \textcolor{gray}{\texttt{torch.tensor(..., device='cuda')}} \\
 $\downarrow$ \\
-Передача GPU $\rightarrow$ CPU \\
+GPU: Параллельная обработка батчами \\
+(Тысячи потоков, тензорные операции) \\
+$\downarrow$ \\
+Передача GPU $\rightarrow$ CPU \textcolor{gray}{\texttt{tensor.cpu().numpy()}} \\
 $\downarrow$ \\
 CPU: Объединение результатов \\
+(векторы бит $\rightarrow$ байты) \\
 \end{tabular}
 \end{center}
 \end{frame}
@@ -434,81 +432,84 @@ CPU: Объединение результатов \\
 \begin{frame}{Архитектура GPU-параллельной версии}
 \textbf{Этапы обработки:}
 \begin{enumerate}
-    \item Преобразование данных на CPU
-    \item Копирование на GPU (\texttt{cuda.to\_device})
-    \item Параллельное выполнение CUDA kernels
+    \item Преобразование данных на CPU (байты $\rightarrow$ векторы бит)
+    \item Разделение на батчи (размер батча: 1024 по умолчанию)
+    \item Создание PyTorch тензоров и копирование на GPU
+    \item Параллельное выполнение тензорных операций на GPU
+    \begin{itemize}
+        \item Матричные умножения (float32 для эффективности)
+        \item Битовые операции над полем GF(2$^n$) (int64)
+        \item Векторизованные вычисления HFE многочлена
+    \end{itemize}
     \item Копирование результатов обратно на CPU
+    \item Преобразование обратно в байты
 \end{enumerate}
 \end{frame}
 
-\begin{frame}{CUDA Kernel функции}
-\begin{block}{Реализованные kernels:}
+\begin{frame}{Ключевые компоненты GPU-реализации}
+\begin{block}{Основные классы и методы:}
 \begin{itemize}
-    \item \texttt{\_gpu\_affine\_transform} — оптимизированное аффинное преобразование
-    \item \texttt{\_gpu\_hfe\_polynomial} — вычисление HFE многочлена
-    \item \texttt{\_gpu\_bits\_to\_field} / \texttt{\_gpu\_field\_to\_bits} — преобразования
-    \item \texttt{\_gpu\_multiply\_gf2n\_device} — оптимизированное умножение в GF(2$^n$)
-    \item \texttt{\_gpu\_power\_gf2n\_device} — оптимизированное возведение в степень
+    \item \texttt{GF2nGPU} — операции над полем GF(2$^n$) на GPU
+    \begin{itemize}
+        \item \texttt{add()} — XOR операция (битовая)
+        \item \texttt{multiply()} — умножение с приведением по модулю
+        \item \texttt{power()} — быстрое возведение в степень
+        \item \texttt{vector\_to\_field()} / \texttt{field\_to\_vector()} — преобразования
+    \end{itemize}
+    \item \texttt{HFEGPUParallel} — основная реализация HFE на GPU
+    \begin{itemize}
+        \item \texttt{encrypt\_batch()} — пакетное шифрование
+        \item \texttt{decrypt\_batch()} — пакетное расшифрование
+        \item \texttt{\_affine\_transform\_gpu()} — аффинные преобразования
+        \item \texttt{\_solve\_hfe\_gpu()} — параллельное решение HFE уравнений
+    \end{itemize}
 \end{itemize}
 \end{block}
-
-\vspace{0.3cm}
-\begin{alertblock}{Оптимизации}
-Все kernels используют коалесцированный доступ к памяти и grid-stride loop pattern
-\end{alertblock}
 \end{frame}
 
-\begin{frame}{CUDA Kernel функции}
-\vspace{0.3cm}
-\textbf{Конфигурация выполнения (оптимизированная):}
+\begin{frame}{Оптимизации PyTorch реализации}
+\begin{block}{Примененные оптимизации:}
 \begin{itemize}
-    \item \texttt{threads\_per\_block = 64} (по умолчанию, оптимизировано)
-    \item \texttt{blocks\_per\_grid = max(128-256, (n\_bytes + 63) / 64)}
-    \item Grid-stride loop: каждый поток обрабатывает несколько байтов
-    \item Адаптивная конфигурация: 256 блоков для данных < 1KB
-\end{itemize}
-\end{frame}
-
-\begin{frame}{CUDA Kernel функции}
-\begin{block}{Примененные оптимизации}
-\begin{itemize}
-    \item Memory Coalescing — коалесцированный доступ к памяти
-    \item Grid-stride Loop — улучшенная утилизация GPU
-    \item Специализация для n=8 — ускорение на 20-30\%
-    \item Адаптивная конфигурация — оптимальное количество блоков
+    \item \textbf{Пакетная обработка} — обработка батчей 1024+ элементов для минимизации накладных расходов
+    \item \textbf{Оптимизация типов данных} — float32 для матричных операций (CUDA не поддерживает Long для matmul)
+    \item \textbf{Автоматическая оптимизация памяти} — PyTorch обеспечивает коалесцированный доступ
+    \item \textbf{Векторизованные операции} — все операции выполняются над тензорами параллельно
+    \item \textbf{Параллельный перебор} — для решения HFE уравнений создается сетка всех возможных значений
 \end{itemize}
 \end{block}
+\end{frame}
 
-\vspace{0.3cm}
+\begin{frame}{Оптимизации PyTorch реализации}
 \begin{alertblock}{Требования}
 \begin{itemize}
-    \item Требуется NVIDIA GPU с CUDA
-    \item Накладные расходы на передачу данных (минимизированы)
-    \item Эффективно для данных $> 1$ KB (благодаря оптимизациям)
+    \item Требуется NVIDIA GPU с CUDA и PyTorch с поддержкой CUDA
+    \item Накладные расходы на передачу данных минимизированы пакетной обработкой
+    \item Эффективно для данных $> 1$ KB благодаря пакетной обработке
 \end{itemize}
 \end{alertblock}
 \end{frame}
 
 \begin{frame}{Оценка производительности GPU-версии}
-\begin{block}{Теоретическое ускорение (после оптимизаций)}
+\begin{block}{Теоретическое ускорение}
 Для больших данных ($> 10$ MB): ускорение $\approx 15-120 \times$ по сравнению с CPU
 \end{block}
 
-\vspace{0.3cm}
+\vspace{0.1cm}
 \textbf{Факторы производительности:}
 \begin{itemize}
-    \item \textbf{Размер данных:} чем больше, тем эффективнее
-    \item \textbf{Пропускная способность памяти:} улучшена на 15-25\% благодаря coalescing
-    \item \textbf{Вычислительная мощность:} тысячи потоков работают параллельно
-    \item \textbf{Утилизация GPU:} улучшена для малых данных благодаря grid-stride loop
+    \item \textbf{Размер батча:} чем больше батч, тем эффективнее использование GPU
+    \item \textbf{Пропускная способность памяти:} PyTorch автоматически оптимизирует доступ
+    \item \textbf{Вычислительная мощность:} тысячи потоков работают параллельно через тензорные операции
+    \item \textbf{Пакетная обработка:} минимизирует накладные расходы на передачу данных
 \end{itemize}
 
-\vspace{0.3cm}
-\textbf{Результаты оптимизаций:}
+\vspace{0.1cm}
+\textbf{Преимущества PyTorch:}
 \begin{itemize}
-    \item Устранены предупреждения о низкой занятости GPU
-    \item Ускорение операций в GF(2$^8$) на 20-30\%
-    \item Улучшена эффективность для данных $> 1$ KB (ранее $> 100$ KB)
+    \item Автоматическая оптимизация операций
+    \item Эффективное использование памяти GPU
+    \item Простота реализации и отладки
+    \item Гибкость в выборе типов данных (float32 для matmul, int64 для битовых операций)
 \end{itemize}
 \end{frame}
 
@@ -549,7 +550,7 @@ CPU: Объединение результатов \\
 
 \begin{frame}{Что распараллелено в каждой версии?}
 \begin{columns}
-\column{0.33\textwidth}
+\column{0.26\textwidth}
 \textbf{Обычная}
 \begin{itemize}
     \item Ничего
@@ -557,7 +558,7 @@ CPU: Объединение результатов \\
     \item Одно ядро CPU
 \end{itemize}
 
-\column{0.33\textwidth}
+\column{0.32\textwidth}
 \textbf{CPU}
 \begin{itemize}
     \item Обработка независимых байтов
@@ -566,14 +567,14 @@ CPU: Объединение результатов \\
     \item Решение HFE уравнений
 \end{itemize}
 
-\column{0.33\textwidth}
-\textbf{GPU (оптимизированная)}
+\column{0.4\textwidth}
+\textbf{GPU}
 \begin{itemize}
-    \item Аффинные преобразования (оптимизированный kernel)
-    \item HFE многочлен (оптимизированный kernel)
-    \item Операции над полями (специализация для n=8)
-    \item Решение HFE (гибрид)
-    \item Memory coalescing, grid-stride loop
+    \item Аффинные преобразования (тензорные операции)
+    \item HFE многочлен (векторизованные вычисления)
+    \item Операции над полями (битовые операции на GPU)
+    \item Решение HFE (параллельный перебор)
+    \item Пакетная обработка, автоматическая оптимизация
 \end{itemize}
 \end{columns}
 
@@ -591,11 +592,11 @@ CPU: Объединение результатов \\
 \begin{center}
 \begin{tabular}{|l|c|c|c|}
 \hline
-\textbf{Размер данных} & \textbf{Обычная} & \textbf{CPU} & \textbf{GPU (оптимизированная)} \\
+\textbf{Размер данных} & \textbf{Обычная} & \textbf{CPU} & \textbf{GPU (PyTorch)} \\
 \hline
-$< 1$ KB & \textcolor{blue}{Быстро} & Средне & Средне (оптимизировано) \\
+$< 1$ KB & \textcolor{blue}{Быстро} & Средне & Средне \\
 \hline
-1 KB - 10 MB & Медленно & \textcolor{red}{Быстро} & \textcolor{green!60!black}{Быстро} (оптимизировано) \\
+1 KB - 10 MB & Медленно & \textcolor{red}{Быстро} & \textcolor{green!60!black}{Быстро} \\
 \hline
 $> 10$ MB & Очень медленно & Медленно & \textcolor{green!60!black}{Очень быстро} \\
 \hline
@@ -604,14 +605,14 @@ $> 10$ MB & Очень медленно & Медленно & \textcolor{green!60
 
 \begin{alertblock}{Оптимальная точка перехода}
 Для данных $> 1$ KB CPU-версия начинает превосходить обычную\\
-Благодаря оптимизациям, GPU-версия эффективна уже для данных $> 1$ KB (ранее требовалось $> 10$ MB)
+GPU-версия эффективна для данных $> 1$ KB благодаря пакетной обработке (batch size = 1024)
 \end{alertblock}
 
 \textbf{Наблюдения:}
 \begin{itemize}
     \item Для малых данных: обычная версия быстрее (нет накладных расходов)
     \item Для средних данных: CPU-версия оптимальна
-    \item Для больших данных: GPU-версия значительно быстрее (улучшено на 20-30\% благодаря оптимизациям)
+    \item Для больших данных: GPU-версия значительно быстрее благодаря пакетной обработке и параллелизму
 \end{itemize}
 \end{frame}
 
@@ -634,11 +635,12 @@ $> 10$ MB & Очень медленно & Медленно & \textcolor{green!60
 \begin{block}{Распараллеливание}
 \begin{itemize}
     \item \textbf{CPU:} Распараллелена обработка независимых байтов через multiprocessing
-    \item \textbf{GPU:} Распараллелены аффинные преобразования и вычисление HFE многочлена через оптимизированные CUDA kernels
+    \item \textbf{GPU:} Распараллелены операции через PyTorch тензорные вычисления
     \begin{itemize}
-        \item Memory coalescing для лучшей пропускной способности
-        \item Grid-stride loop для улучшенной утилизации
-        \item Специализация для GF(2$^8$) для ускорения на 20-30\%
+        \item Пакетная обработка для минимизации накладных расходов
+        \item Автоматическая оптимизация доступа к памяти PyTorch
+        \item Векторизованные операции над полем GF(2$^n$)
+        \item Параллельное решение HFE уравнений через перебор на GPU
     \end{itemize}
     \item Обе версии эффективны для больших объемов данных
 \end{itemize}

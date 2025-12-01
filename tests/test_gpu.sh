@@ -29,8 +29,8 @@ if [ $? -ne 0 ]; then
     exit 0
 fi
 
-echo "Запуск GPU-параллельной версии с размером данных 4096 байт..."
-python3 main.py --mode gpu --data-size 4096 --log-level INFO
+echo "Запуск GPU-параллельной версии с размером данных 65536 байт..."
+python3 main.py --mode gpu --data-size 65536 --log-level INFO
 
 if [ $? -eq 0 ]; then
     echo ""
