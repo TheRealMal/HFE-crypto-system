@@ -30,8 +30,25 @@ def setup_logger(name: str, log_level: str = "INFO", log_file: str = None) -> lo
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # Консольный обработчик
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Консольный обработчик с безопасной обработкой Unicode для Windows
+    class SafeStreamHandler(logging.StreamHandler):
+        """Обработчик потока с безопасной обработкой Unicode для Windows"""
+        def emit(self, record):
+            try:
+                super().emit(record)
+            except UnicodeEncodeError:
+                # Если не удается закодировать, заменяем проблемные символы
+                try:
+                    msg = self.format(record)
+                    # Заменяем проблемные Unicode символы на ASCII
+                    safe_msg = msg.encode('ascii', errors='replace').decode('ascii')
+                    stream = self.stream
+                    stream.write(safe_msg + self.terminator)
+                    self.flush()
+                except Exception:
+                    self.handleError(record)
+    
+    console_handler = SafeStreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)

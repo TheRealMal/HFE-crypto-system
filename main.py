@@ -53,9 +53,9 @@ def benchmark_encryption_decryption(hfe_instance, data: bytes, mode: str):
     # Проверка корректности
     success = data == decrypted
     if success:
-        logger.info("✓ Расшифрование успешно: данные совпадают с оригиналом")
+        logger.info("[OK] Расшифрование успешно: данные совпадают с оригиналом")
     else:
-        logger.error("✗ Ошибка: расшифрованные данные не совпадают с оригиналом")
+        logger.error("[ERROR] Ошибка: расшифрованные данные не совпадают с оригиналом")
         logger.debug(f"Оригинал: {data[:20]}...")
         logger.debug(f"Расшифровано: {decrypted[:20]}...")
     
@@ -230,7 +230,7 @@ def main():
             for mode, result in valid_results.items():
                 total_time = result.get("total_time", 0)
                 success = result.get("success", False)
-                status = "✓" if success else "✗"
+                status = "[OK]" if success else "[FAIL]"
                 
                 if base_time and mode != "base":
                     speedup = base_time / total_time if total_time > 0 else 0
