@@ -4,6 +4,7 @@
 """
 import sys
 import os
+import subprocess
 from pathlib import Path
 from datetime import datetime
 
@@ -11,7 +12,11 @@ from datetime import datetime
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-import subprocess
+# Добавление директории tests в путь для импорта
+tests_dir = Path(__file__).parent
+sys.path.insert(0, str(tests_dir))
+
+from test_utils import run_subprocess_safe
 
 
 def main():
@@ -57,7 +62,7 @@ def main():
             f.write("-" * 50 + "\n")
         
         # Запуск теста
-        result = subprocess.run(
+        result = run_subprocess_safe(
             [
                 sys.executable,
                 str(main_py),
@@ -67,9 +72,7 @@ def main():
             ],
             cwd=str(project_root),
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding='utf-8'
+            stderr=subprocess.STDOUT
         )
         
         with open(results_file, 'a', encoding='utf-8') as f:

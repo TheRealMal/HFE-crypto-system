@@ -4,12 +4,17 @@
 """
 import sys
 import os
-import subprocess
 from pathlib import Path
 
 # Добавление корневой директории проекта в путь
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+# Добавление директории tests в путь для импорта
+tests_dir = Path(__file__).parent
+sys.path.insert(0, str(tests_dir))
+
+from test_utils import run_subprocess_safe
 
 # Цвета для вывода (ANSI escape codes)
 class Colors:
@@ -31,7 +36,7 @@ def run_test(test_name, test_script):
         print(f"{Colors.YELLOW}⚠ Тест не найден: {test_script}{Colors.NC}")
         return None  # Пропущен
     
-    result = subprocess.run(
+    result = run_subprocess_safe(
         [sys.executable, str(test_path)],
         cwd=str(project_root)
     )

@@ -10,7 +10,11 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-import subprocess
+# Добавление директории tests в путь для импорта
+tests_dir = Path(__file__).parent
+sys.path.insert(0, str(tests_dir))
+
+from test_utils import run_subprocess_safe
 
 
 def main():
@@ -28,7 +32,7 @@ def main():
     print("Запуск базовой версии с размером данных 2048 байт...")
     
     # Запуск теста
-    result = subprocess.run(
+    result = run_subprocess_safe(
         [
             sys.executable,
             str(main_py),
