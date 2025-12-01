@@ -12,11 +12,6 @@ logger = logging.getLogger(__name__)
 # Проверка доступности CUDA
 try:
     CUDA_AVAILABLE = torch.cuda.is_available()
-    if CUDA_AVAILABLE:
-        logger.info(f"CUDA доступен: {torch.cuda.get_device_name(0)}")
-        logger.info(f"CUDA версия: {torch.version.cuda}")
-    else:
-        logger.warning("CUDA недоступен, GPU-параллелизация невозможна")
 except Exception as e:
     CUDA_AVAILABLE = False
     logger.warning(f"Ошибка при проверке CUDA: {e}")
