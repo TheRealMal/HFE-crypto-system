@@ -397,7 +397,9 @@ def _affine_transform_gpu(self, x, A, b):
     \item \textbf{Пакетная обработка} — обработка батчей размером 1024+ элементов одновременно
 \end{itemize}
 \end{block}
+\end{frame}
 
+\begin{frame}{Распараллеленные операции на GPU}
 \begin{alertblock}{Параллельное решение HFE уравнений:}
 \begin{itemize}
     \item \textbf{Параллельный перебор} — для малых полей (n $\leq$ 8) создается сетка всех возможных значений
