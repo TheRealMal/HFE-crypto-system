@@ -92,7 +92,7 @@ python3 tests/test_performance.py
 ```
 
 **Что делает:**
-- Тестирует с размерами данных: 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536 байт
+- Тестирует с размерами данных: 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072 байт
 - Сохраняет результаты в `logs/performance_results.log`
 - Позволяет сравнить производительность разных версий
 
@@ -110,35 +110,6 @@ python3 tests/run_all_tests.py
 - Запускает все доступные тесты
 - Выводит цветную статистику (зеленый = пройден, красный = провален, желтый = пропущен)
 - Возвращает код выхода 0 при успехе, 1 при наличии провалов
-
-## Быстрый старт
-
-### Запуск всех тестов:
-```bash
-cd /path/to/hw
-python3 tests/run_all_tests.py
-# или
-./tests/run_all_tests.py
-```
-
-### Запуск конкретного теста:
-```bash
-python3 tests/test_correctness.py
-python3 tests/test_base.py
-python3 tests/test_cpu.py
-python3 tests/test_gpu.py
-python3 tests/test_all.py
-python3 tests/test_performance.py
-```
-
-## Требования
-
-- Python 3.7+
-- Установленные зависимости из `requirements.txt`
-
-Для GPU-тестов дополнительно требуется:
-- NVIDIA GPU с поддержкой CUDA
-- PyTorch с поддержкой CUDA (`torch` с CUDA)
 
 ## Структура выходных данных
 
@@ -183,47 +154,11 @@ python3 tests/test_performance.py
 ## Устранение неполадок
 
 ### Тесты не запускаются
-- Убедитесь, что скрипты имеют права на выполнение: `chmod +x tests/*.py`
 - Проверьте, что вы находитесь в корневой директории проекта
 - Убедитесь, что используется правильная версия Python: `python3 --version`
+- Убедитесь, что скрипты имеют права на выполнение (опционально): `chmod +x tests/*.py`
 
 ### Ошибки импорта
 - Убедитесь, что установлены все зависимости: `pip install -r requirements.txt`
 - Проверьте, что Python может найти модули из `src/`
 - Убедитесь, что вы запускаете тесты из корневой директории проекта
-
-### GPU тесты не работают
-- Это нормально, если CUDA недоступен
-- Для использования GPU установите PyTorch с поддержкой CUDA: `pip install torch`
-- Убедитесь, что у вас есть NVIDIA GPU с поддержкой CUDA
-- Проверьте доступность CUDA: `python3 -c "import torch; print(torch.cuda.is_available())"`
-
-## Интеграция с CI/CD
-
-Тесты можно использовать в системах непрерывной интеграции:
-
-```yaml
-# Пример для GitHub Actions
-- name: Run tests
-  run: |
-    pip install -r requirements.txt
-    python3 tests/run_all_tests.py
-```
-
-## Миграция с bash-скриптов
-
-Если вы использовали старые bash-скрипты (`.sh`), они все еще доступны, но рекомендуется использовать новые Python-скрипты:
-
-- `test_correctness.sh` → `test_correctness.py`
-- `test_base.sh` → `test_base.py`
-- `test_cpu.sh` → `test_cpu.py`
-- `test_gpu.sh` → `test_gpu.py`
-- `test_all.sh` → `test_all.py`
-- `test_performance.sh` → `test_performance.py`
-- `run_all_tests.sh` → `run_all_tests.py`
-
-Преимущества Python-версий:
-- Кроссплатформенность (работают на Windows, Linux, macOS)
-- Лучшая обработка ошибок
-- Более читаемый код
-- Легче расширять и модифицировать
